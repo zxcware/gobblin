@@ -25,6 +25,8 @@ import gobblin.configuration.State;
 import gobblin.configuration.WorkUnitState;
 import gobblin.http.HttpClient;
 import gobblin.http.HttpOperation;
+import gobblin.net.Request;
+import gobblin.net.Response;
 import gobblin.http.ResponseHandler;
 import gobblin.http.ResponseStatus;
 import gobblin.utils.HttpConstants;
@@ -50,7 +52,7 @@ public abstract class AsyncHttpJoinConverter<SI, SO, DI, DO, RQ, RP> extends Asy
           .build());
 
   protected HttpClient<RQ, RP> httpClient = null;
-  protected ResponseHandler<RP> responseHandler = null;
+  protected ResponseHandler<RQ, RP> responseHandler = null;
   protected AsyncRequestBuilder<GenericRecord, RQ> requestBuilder = null;
 
   public AsyncHttpJoinConverter init(WorkUnitState workUnitState) {
@@ -70,12 +72,12 @@ public abstract class AsyncHttpJoinConverter<SI, SO, DI, DO, RQ, RP> extends Asy
     return convertSchemaImpl(inputSchema, workUnitState);
   }
 
-  protected abstract HttpClient<RQ, RP>   createHttpClient(Config config, SharedResourcesBroker<GobblinScopeTypes> broker);
-  protected abstract ResponseHandler<RP> createResponseHandler(Config config);
+  protected abstract HttpClient<RQ, RP>  createHttpClient(Config config, SharedResourcesBroker<GobblinScopeTypes> broker);
+  protected abstract ResponseHandler<RQ, RP> createResponseHandler(Config config);
   protected abstract AsyncRequestBuilder<GenericRecord, RQ> createRequestBuilder(Config config);
   protected abstract HttpOperation generateHttpOperation (DI inputRecord, State state);
-  protected abstract SO convertSchemaImpl (SI inputSchema, WorkUnitState workUnitState) throws SchemaConversionException;
-  protected abstract DO convertRecordImpl (SO outputSchema, DI input, RQ rawRequest, ResponseStatus status) throws DataConversionException;
+  protected abstract SO convertSchemaImpl(SI inputSchema, WorkUnitState workUnitState) throws SchemaConversionException;
+  protected abstract DO convertRecordImpl(SO outputSchema, DI input, Request<RQ> request, ResponseStatus status) throws DataConversionException;
 
   /**
    * A helper class which performs the conversion from http response to DO type output, saved as a {@link CompletableFuture}
@@ -85,28 +87,28 @@ public abstract class AsyncHttpJoinConverter<SI, SO, DI, DO, RQ, RP> extends Asy
     private final AsyncHttpJoinConverter<SI, SO, DI, DO, RQ, RP> converter;
 
     @Getter
-    private final Callback<RP> callback;
+    private final Callback<Response<RP>> callback;
 
-    public AsyncHttpJoinConverterContext(AsyncHttpJoinConverter converter, SO outputSchema, DI input, RQ rawRequest) {
+    public AsyncHttpJoinConverterContext(AsyncHttpJoinConverter converter, SO outputSchema, DI input, Request<RQ> request) {
       this.future = new CompletableFuture();
       this.converter = converter;
-      this.callback = new Callback<RP>() {
+      this.callback = new Callback<Response<RP>>() {
         @Override
-        public void onSuccess(RP result) {
+        public void onSuccess(Response<RP> result) {
           try {
-            ResponseStatus status = AsyncHttpJoinConverterContext.this.converter.responseHandler.handleResponse(result);
+            ResponseStatus status = AsyncHttpJoinConverterContext.this.converter.responseHandler.handleResponse(request, result);
             switch (status.getType()) {
               case OK:
-                AsyncHttpJoinConverterContext.this.onSuccess(rawRequest, status, outputSchema, input);
+                AsyncHttpJoinConverterContext.this.onSuccess(request, status, outputSchema, input);
                 break;
               case CLIENT_ERROR:
-                AsyncHttpJoinConverterContext.this.onSuccess(rawRequest, status, outputSchema, input);
+                AsyncHttpJoinConverterContext.this.onSuccess(request, status, outputSchema, input);
                 break;
               case SERVER_ERROR:
                 // Server side error. Retry
-                throw new DataConversionException(rawRequest + " send failed due to server error");
+                throw new DataConversionException(request + " send failed due to server error");
               default:
-                throw new DataConversionException(rawRequest + " Should not reach here");
+                throw new DataConversionException(request + " Should not reach here");
             }
           } catch (Exception e) {
             AsyncHttpJoinConverterContext.this.future.completeExceptionally(e);
@@ -120,7 +122,7 @@ public abstract class AsyncHttpJoinConverter<SI, SO, DI, DO, RQ, RP> extends Asy
       };
     }
 
-    private void onSuccess(RQ rawRequest, ResponseStatus status, SO outputSchema, DI input) throws DataConversionException {
+    private void onSuccess(Request<RQ> rawRequest, ResponseStatus status, SO outputSchema, DI input) throws DataConversionException {
       log.debug("{} send with status type {}", rawRequest, status.getType());
       DO output = this.converter.convertRecordImpl(outputSchema, input, rawRequest, status);
       AsyncHttpJoinConverterContext.this.future.complete(output);
@@ -147,13 +149,12 @@ public abstract class AsyncHttpJoinConverter<SI, SO, DI, DO, RQ, RP> extends Asy
     Queue<BufferedRecord<GenericRecord>> buffer = new LinkedBlockingDeque<>();
     buffer.add(bufferedRecord);
     AsyncRequest<GenericRecord, RQ> request = this.requestBuilder.buildRequest(buffer);
-    RQ rawRequest = request.getRawRequest();
 
     // Execute query and get response
-    AsyncHttpJoinConverterContext context = new AsyncHttpJoinConverterContext(this, outputSchema, inputRecord, rawRequest);
+    AsyncHttpJoinConverterContext context = new AsyncHttpJoinConverterContext(this, outputSchema, inputRecord, request);
 
     try {
-      httpClient.sendAsyncRequest(rawRequest, context.getCallback());
+      httpClient.sendAsyncRequest(request, context.getCallback());
     } catch (IOException e) {
       throw new DataConversionException(e);
     }

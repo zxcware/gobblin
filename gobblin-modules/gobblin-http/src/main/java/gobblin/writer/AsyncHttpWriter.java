@@ -30,6 +30,7 @@ import gobblin.async.AsyncRequestBuilder;
 import gobblin.async.BufferedRecord;
 import gobblin.async.DispatchException;
 import gobblin.http.HttpClient;
+import gobblin.net.Response;
 import gobblin.http.ResponseHandler;
 import gobblin.http.ResponseStatus;
 
@@ -49,7 +50,7 @@ public class AsyncHttpWriter<D, RQ, RP> extends AbstractAsyncDataWriter<D> {
   public static final int DEFAULT_MAX_ATTEMPTS = 3;
 
   private final HttpClient<RQ, RP> httpClient;
-  private final ResponseHandler<RP> responseHandler;
+  private final ResponseHandler<RQ, RP> responseHandler;
   private final AsyncRequestBuilder<D, RQ> requestBuilder;
   private final int maxAttempts;
 
@@ -68,13 +69,13 @@ public class AsyncHttpWriter<D, RQ, RP> extends AbstractAsyncDataWriter<D> {
       return;
     }
 
-    RQ rawRequest = asyncRequest.getRawRequest();
-    RP response;
+    //RQ rawRequest = asyncRequest.getRawRequest();
+    Response<RP> response;
 
     int attempt = 0;
     while (attempt < maxAttempts) {
       try {
-          response = httpClient.sendRequest(rawRequest);
+          response = httpClient.sendRequest(asyncRequest);
       } catch (IOException e) {
         // Retry
         attempt++;
@@ -89,7 +90,7 @@ public class AsyncHttpWriter<D, RQ, RP> extends AbstractAsyncDataWriter<D> {
         }
       }
 
-      ResponseStatus status = responseHandler.handleResponse(response);
+      ResponseStatus status = responseHandler.handleResponse(asyncRequest, response);
       switch (status.getType()) {
         case OK:
           // Write succeeds

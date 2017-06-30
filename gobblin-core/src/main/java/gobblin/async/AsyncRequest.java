@@ -21,7 +21,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 import lombok.Getter;
-import lombok.Setter;
+
+import gobblin.net.SimpleRequest;
 
 
 /**
@@ -31,13 +32,11 @@ import lombok.Setter;
  * @param <D> type of data record
  * @param <RQ> type of raw request
  */
-public class AsyncRequest<D, RQ> {
+public class AsyncRequest<D, RQ> extends SimpleRequest<RQ> {
   @Getter
   private int recordCount = 0;
   @Getter
   protected long bytesWritten = 0;
-  @Getter @Setter
-  private RQ rawRequest;
 
   @Getter
   private final List<Thunk> thunks = new ArrayList<>();

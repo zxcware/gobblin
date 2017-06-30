@@ -29,18 +29,21 @@ import com.typesafe.config.Config;
 import com.typesafe.config.ConfigFactory;
 
 import gobblin.r2.R2ClientFactory;
-import gobblin.restli.R2Client;
-import gobblin.restli.R2RestRequestBuilder;
-import gobblin.restli.R2RestResponseHandler;
+import gobblin.r2.R2Client;
+import gobblin.r2.R2RestRequestBuilder;
+import gobblin.r2.R2RestResponseHandler;
+import gobblin.r2.RestliResponseHandler;
 import gobblin.utils.HttpConstants;
 import gobblin.utils.HttpUtils;
 
 
 public class R2RestWriterBuilder extends AsyncHttpWriterBuilder<GenericRecord, RestRequest, RestResponse> {
+  public static final String IS_RESTLI = "isRestli";
 
   private static final Config FALLBACK =
       ConfigFactory.parseMap(ImmutableMap.<String, Object>builder()
           .put(HttpConstants.PROTOCOL_VERSION, "2.0.0")
+          .put(IS_RESTLI, false)
           .build());
 
   @Override
@@ -54,7 +57,11 @@ public class R2RestWriterBuilder extends AsyncHttpWriterBuilder<GenericRecord, R
     asyncRequestBuilder = new R2RestRequestBuilder(urlTemplate, verb, protocolVersion);
 
     Set<String> errorCodeWhitelist = HttpUtils.getErrorCodeWhitelist(config);
-    responseHandler = new R2RestResponseHandler(errorCodeWhitelist);
+    if (config.getBoolean(IS_RESTLI)) {
+      responseHandler = new RestliResponseHandler(errorCodeWhitelist);
+    } else {
+      responseHandler = new R2RestResponseHandler(errorCodeWhitelist);
+    }
     return this;
   }
 

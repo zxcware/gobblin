@@ -29,6 +29,9 @@ import lombok.extern.slf4j.Slf4j;
 import gobblin.async.Callback;
 import gobblin.broker.gobblin_scopes.GobblinScopeTypes;
 import gobblin.broker.iface.SharedResourcesBroker;
+import gobblin.net.Request;
+import gobblin.net.Response;
+import gobblin.net.SimpleResponse;
 import gobblin.utils.HttpUtils;
 
 /**
@@ -142,27 +145,34 @@ public class ApacheHttpAsyncClient extends ThrottledHttpClient<HttpUriRequest, H
   }
 
   @Override
-  public HttpResponse sendRequestImpl(HttpUriRequest request) throws IOException {
-    SyncHttpResponseCallback callback = new SyncHttpResponseCallback(request);
-    this.client.execute(request, callback);
+  public Response<HttpResponse> sendRequestImpl(Request<HttpUriRequest> request) throws IOException {
+    SimpleResponse<HttpResponse> response = new SimpleResponse<>();
+    HttpUriRequest rawRequest = request.getRawRequest();
+    SyncHttpResponseCallback callback = new SyncHttpResponseCallback(rawRequest);
+    this.client.execute(rawRequest, callback);
 
     try {
       callback.await();
       if (callback.getException() != null) {
         throw new IOException(callback.getException());
       }
-      return callback.getResponse();
+
+      response.setRawResponse(callback.getResponse());
+      return response;
     } catch (InterruptedException e) {
       throw new IOException(e);
     }
   }
 
   @Override
-  public void sendAsyncRequestImpl(HttpUriRequest request, Callback<HttpResponse> callback) throws IOException {
-    this.client.execute(request, new FutureCallback<HttpResponse>() {
+  public void sendAsyncRequestImpl(Request<HttpUriRequest> request, Callback<Response<HttpResponse>> callback) throws IOException {
+    SimpleResponse<HttpResponse> response = new SimpleResponse<>();
+    HttpUriRequest rawRequest = request.getRawRequest();
+    this.client.execute(rawRequest, new FutureCallback<HttpResponse>() {
       @Override
       public void completed(HttpResponse result) {
-        callback.onSuccess(result);
+        response.setRawResponse(result);
+        callback.onSuccess(response);
       }
 
       @Override

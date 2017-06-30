@@ -6,8 +6,12 @@ import java.util.Set;
 
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.util.EntityUtils;
 import lombok.extern.slf4j.Slf4j;
+
+import gobblin.net.Request;
+import gobblin.net.Response;
 import gobblin.utils.HttpUtils;
 
 
@@ -21,7 +25,7 @@ import gobblin.utils.HttpUtils;
  * </p>
  */
 @Slf4j
-public class ApacheHttpResponseHandler<RP extends HttpResponse> implements ResponseHandler<RP> {
+public class ApacheHttpResponseHandler<RP extends HttpResponse> implements ResponseHandler<HttpUriRequest, RP> {
   private final Set<String> errorCodeWhitelist;
 
   public ApacheHttpResponseHandler() {
@@ -33,21 +37,22 @@ public class ApacheHttpResponseHandler<RP extends HttpResponse> implements Respo
   }
 
   @Override
-  public ApacheHttpResponseStatus handleResponse(RP response) {
+  public ApacheHttpResponseStatus handleResponse(Request<HttpUriRequest> request, Response<RP> response) {
+    RP rawResponse = response.getRawResponse();
     ApacheHttpResponseStatus status = new ApacheHttpResponseStatus(StatusType.OK);
-    int statusCode = response.getStatusLine().getStatusCode();
+    int statusCode = rawResponse.getStatusLine().getStatusCode();
     status.setStatusCode(statusCode);
 
     HttpUtils.updateStatusType(status, statusCode, errorCodeWhitelist);
 
     if (status.getType() == StatusType.OK) {
-      status.setContent(getEntityAsByteArray(response.getEntity()));
-      status.setContentType(response.getEntity().getContentType().getValue());
+      status.setContent(getEntityAsByteArray(rawResponse.getEntity()));
+      status.setContentType(rawResponse.getEntity().getContentType().getValue());
     } else {
       log.info("Receive an unsuccessful response with status code: " + statusCode);
     }
 
-    HttpEntity entity = response.getEntity();
+    HttpEntity entity = rawResponse.getEntity();
     if (entity != null) {
       consumeEntity(entity);
     }

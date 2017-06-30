@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package gobblin.restli;
+package gobblin.r2;
 
 import java.io.IOException;
 import java.util.concurrent.ExecutionException;
@@ -25,29 +25,33 @@ import com.linkedin.common.util.None;
 import com.linkedin.r2.message.rest.RestRequest;
 import com.linkedin.r2.message.rest.RestResponse;
 import com.linkedin.r2.transport.common.Client;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import gobblin.async.Callback;
 import gobblin.broker.iface.SharedResourcesBroker;
+import gobblin.net.Request;
+import gobblin.net.Response;
+import gobblin.net.SimpleResponse;
 import gobblin.http.ThrottledHttpClient;
 
 @Slf4j
 public class R2Client extends ThrottledHttpClient<RestRequest, RestResponse> {
-  private final Client client;
+  protected final Client client;
 
   public R2Client(Client client, SharedResourcesBroker broker) {
-    super (broker, getLimiterKey());
+    super(broker, getLimiterKey());
     this.client = client;
   }
 
   @Override
-  public RestResponse sendRequestImpl(RestRequest request)
+  public Response<RestResponse> sendRequestImpl(Request<RestRequest> request)
       throws IOException {
-    Future<RestResponse> responseFuture = client.restRequest(request);
-    RestResponse response;
+    SimpleResponse<RestResponse> response = new SimpleResponse<>();
+    RestRequest rawRequest = request.getRawRequest();
+    Future<RestResponse> responseFuture = client.restRequest(rawRequest);
     try {
-      response = responseFuture.get();
+      RestResponse rawResponse = responseFuture.get();
+      response.setRawResponse(rawResponse);
     } catch (InterruptedException | ExecutionException e) {
       throw new IOException(e);
     }
@@ -55,9 +59,11 @@ public class R2Client extends ThrottledHttpClient<RestRequest, RestResponse> {
   }
 
   @Override
-  public void sendAsyncRequestImpl(RestRequest request, Callback<RestResponse> callback)
+  public void sendAsyncRequestImpl(Request<RestRequest> request, Callback<Response<RestResponse>> callback)
       throws IOException {
-    client.restRequest(request, new com.linkedin.common.callback.Callback<RestResponse>() {
+    SimpleResponse<RestResponse> response = new SimpleResponse<>();
+    RestRequest rawRequest = request.getRawRequest();
+    client.restRequest(rawRequest, new com.linkedin.common.callback.Callback<RestResponse>() {
       @Override
       public void onError(Throwable e) {
         callback.onFailure(e);
@@ -65,7 +71,8 @@ public class R2Client extends ThrottledHttpClient<RestRequest, RestResponse> {
 
       @Override
       public void onSuccess(RestResponse result) {
-        callback.onSuccess(result);
+        response.setRawResponse(result);
+        callback.onSuccess(response);
       }
     });
   }

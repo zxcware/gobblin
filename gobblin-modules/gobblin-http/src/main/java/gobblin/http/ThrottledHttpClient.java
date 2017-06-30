@@ -15,6 +15,8 @@ import gobblin.broker.iface.SharedResourcesBroker;
 import gobblin.metrics.MetricContext;
 import gobblin.metrics.broker.MetricContextFactory;
 import gobblin.metrics.broker.MetricContextKey;
+import gobblin.net.Request;
+import gobblin.net.Response;
 import gobblin.util.http.HttpLimiterKey;
 import gobblin.util.limiter.Limiter;
 import gobblin.util.limiter.broker.SharedLimiterFactory;
@@ -46,12 +48,12 @@ public abstract class ThrottledHttpClient<RQ, RP> implements HttpClient<RQ, RP> 
     }
   }
 
-  public final RP sendRequest(RQ request) throws IOException {
+  public final Response<RP> sendRequest(Request<RQ> request) throws IOException {
     final Timer.Context context = sendTimer.time();
     try {
       if (limiter.acquirePermits(1) != null) {
         log.debug ("Acquired permits successfully");
-        return sendRequestImpl (request);
+        return sendRequestImpl(request);
       } else {
         throw new IOException ("Acquired permits return null");
       }
@@ -62,12 +64,12 @@ public abstract class ThrottledHttpClient<RQ, RP> implements HttpClient<RQ, RP> 
     }
   }
 
-  public final void sendAsyncRequest(RQ request, Callback<RP> callback) throws IOException {
+  public final void sendAsyncRequest(Request<RQ> request, Callback<Response<RP>> callback) throws IOException {
     final Timer.Context context = sendTimer.time();
     try {
       if (limiter.acquirePermits(1) != null) {
         log.debug ("Acquired permits successfully");
-        sendAsyncRequestImpl (request, callback);
+        sendAsyncRequestImpl(request, callback);
       } else {
         throw new IOException ("Acquired permits return null");
       }
@@ -78,7 +80,7 @@ public abstract class ThrottledHttpClient<RQ, RP> implements HttpClient<RQ, RP> 
     }
   }
 
-  public abstract RP sendRequestImpl (RQ request) throws IOException;
+  public abstract Response<RP> sendRequestImpl(Request<RQ> request) throws IOException;
 
-  public abstract void sendAsyncRequestImpl (RQ request, Callback<RP> callback) throws IOException;
+  public abstract void sendAsyncRequestImpl(Request<RQ> request, Callback<Response<RP>> callback) throws IOException;
 }

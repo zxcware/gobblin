@@ -23,6 +23,9 @@ import lombok.extern.slf4j.Slf4j;
 import gobblin.async.Callback;
 import gobblin.broker.gobblin_scopes.GobblinScopeTypes;
 import gobblin.broker.iface.SharedResourcesBroker;
+import gobblin.net.Request;
+import gobblin.net.Response;
+import gobblin.net.SimpleResponse;
 import gobblin.utils.HttpUtils;
 
 
@@ -73,12 +76,16 @@ public class ApacheHttpClient extends ThrottledHttpClient<HttpUriRequest, Closea
   }
 
   @Override
-  public CloseableHttpResponse sendRequestImpl(HttpUriRequest request) throws IOException {
-    return client.execute(request);
+  public Response<CloseableHttpResponse> sendRequestImpl(Request<HttpUriRequest> request) throws IOException {
+    SimpleResponse<CloseableHttpResponse> response = new SimpleResponse<>();
+    HttpUriRequest rawRequest = request.getRawRequest();
+    CloseableHttpResponse rawResponse = client.execute(rawRequest);
+    response.setRawResponse(rawResponse);
+    return response;
   }
 
   @Override
-  public void sendAsyncRequestImpl(HttpUriRequest request, Callback<CloseableHttpResponse> callback) throws IOException {
+  public void sendAsyncRequestImpl(Request<HttpUriRequest> request, Callback<Response<CloseableHttpResponse>> callback) throws IOException {
     throw new UnsupportedOperationException("ApacheHttpClient doesn't support asynchronous send");
   }
 
