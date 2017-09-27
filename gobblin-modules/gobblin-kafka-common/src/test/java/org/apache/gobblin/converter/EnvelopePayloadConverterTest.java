@@ -18,6 +18,7 @@
 package org.apache.gobblin.converter;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -92,6 +93,30 @@ public class EnvelopePayloadConverterTest {
     for (Schema.Field field : payload.getSchema().getFields()) {
       Assert.assertTrue(expectedPayload.get(field.name()).equals(payload.get(field.name())));
     }
+  }
+
+  @Test
+  public void testLiveConversion() throws Exception {
+    Schema inputSchema = new Schema.Parser().parse(new FileInputStream("/Users/zhchen/data/brooklin.avsc"));
+    GenericDatumReader<GenericRecord> datumReader = new GenericDatumReader<>(inputSchema);
+
+    File tmp = File.createTempFile(getClass().getSimpleName(), null);
+    FileUtils.copyInputStreamToFile(new FileInputStream("/Users/zhchen/data/anet.test_clob_tenart.avro"), tmp);
+    DataFileReader<GenericRecord> dataFileReader = new DataFileReader<>(tmp, datumReader);
+    GenericRecord inputRecord = dataFileReader.next();
+
+    WorkUnitState workUnitState = new WorkUnitState();
+    workUnitState.setProp(BaseEnvelopeSchemaConverter.PAYLOAD_SCHEMA_TOPIC, "brooklin-oracle-ANET.TEST_CLOB_TENART");
+    workUnitState.setProp(BaseEnvelopeSchemaConverter.PAYLOAD_SCHEMA_ID_FIELD, "metadata.PayloadSchemaId");
+    workUnitState.setProp(KafkaSchemaRegistry.KAFKA_SCHEMA_REGISTRY_URL, "http://lca1-schemaregistry-vip-1.stg.linkedin.com:10252/schemaRegistry/schemas");
+
+    EnvelopePayloadConverter converter = new EnvelopePayloadConverter();
+    converter.init(workUnitState);
+
+    Schema outputSchema = converter.convertSchema(inputSchema, workUnitState);
+    List<GenericRecord> outputRecords = new ArrayList<>();
+    Iterables.addAll(outputRecords, converter.convertRecord(outputSchema, inputRecord, workUnitState));
+    Assert.assertTrue(outputRecords.size() == 1);
   }
 
   static class MockKafkaAvroSchemaRegistryFactory extends KafkaAvroSchemaRegistryFactory {
